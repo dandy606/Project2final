@@ -2,14 +2,15 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <title>Dashboard Monitoring ESP32 - Final</title>
+  <title>Final Dashboard Monitoring ESP32</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
+    /* STYLE DASHBOARD */
     body { background-color: #121212; color: #ffffff; font-family: 'Segoe UI', Arial, sans-serif; text-align: center; margin: 0; padding: 20px; }
-    h2 { color: #00e5ff; text-transform: uppercase; }
+    h2 { color: #00e5ff; text-transform: uppercase; letter-spacing: 1px; }
     
-    /* Navigasi & Tombol */
+    /* TOMBOL & KONTROL */
     .controls { margin: 20px 0; }
     button { padding: 12px 20px; margin: 5px; border: none; border-radius: 8px; font-size: 15px; cursor: pointer; font-weight: bold; transition: 0.2s; }
     button:active { transform: scale(0.95); }
@@ -18,7 +19,7 @@
     .stop { background-color: #ff5252; color: white; }
     .btn-sheet { background-color: #ffeb3b; color: black; }
     
-    /* Panel Interval */
+    /* PANEL INTERVAL */
     .interval-panel { 
       margin: 20px auto; padding: 15px; background: #1e1e1e; 
       display: inline-block; border-radius: 12px; border: 1px solid #333; 
@@ -29,9 +30,9 @@
     }
     .btn-set { background-color: #00bcd4; color: black; padding: 8px 15px; }
 
-    /* Grafik & Tabel */
+    /* GRAFIK & TABEL */
     .chart-container { background-color: #1e1e1e; border-radius: 10px; margin: 20px auto; padding: 15px; max-width: 95%; border: 1px solid #333; }
-    table { margin: 20px auto; border-collapse: collapse; width: 95%; background-color: #1e1e1e; font-size: 14px; }
+    table { margin: 20px auto; border-collapse: collapse; width: 95%; background-color: #1e1e1e; font-size: 14px; border-radius: 10px; overflow: hidden; }
     th, td { padding: 12px; border: 1px solid #333; }
     th { background-color: #00bcd4; color: black; }
     tr:nth-child(even) { background-color: #252525; }
@@ -42,17 +43,17 @@
 
 <body>
 
-<h2>🌙 Sistem Monitoring Real-Time</h2>
-<p id="status">Menghubungkan ke Server...</p>
+<h2>🌙 Monitoring System ESP32</h2>
+<p id="status">Inisialisasi...</p>
 
 <div class="controls">
   <button class="start" onclick="setStatus('START')">🟢 START</button> 
   <button class="stop" onclick="setStatus('STOP')">🔴 STOP</button>
-  <button class="btn-sheet" onclick="openSpreadsheet()">📊 BUKA SPREADSHEET</button>
+  <button class="btn-sheet" onclick="openSpreadsheet()">📊 DATA SPREADSHEET</button>
 </div>
 
 <div class="interval-panel">
-  <label for="intervalInput">⏱️ Refresh Setiap (Detik): </label>
+  <label for="intervalInput">⏱️ Update Data (Detik): </label>
   <input type="number" id="intervalInput" value="3" min="1">
   <button class="btn-set" onclick="updateInterval()">SET & REFRESH</button>
 </div>
@@ -68,11 +69,11 @@
 </div>
 
 <div class="chart-container">
-  <h3>🚰 Grafik Flow Sensor (L/min)</h3>
+  <h3>🚰 Grafik Flow Rate (L/min)</h3>
   <canvas id="chartFlow"></canvas>
 </div>
 
-<h3>📋 Tabel Log Data</h3>
+<h3>📋 Log Data Terakhir</h3>
 <table id="data-table">
   <thead>
     <tr>
@@ -87,7 +88,7 @@
 </table>
 
 <script>
-// ===== 1. CONFIG URL =====
+// ===== 1. KONFIGURASI =====
 const sheetURL = "https://opensheet.elk.sh/1FPYOkyNUxfQHIs9WuXchkAKFpV8WczjSBQfyN1OB2YE/DATA";
 const controlURL = "https://script.google.com/macros/s/AKfycbx-cziGXnj42WpcGbeZ4xOm3-StjmqZ-n_8pJy9binWBI0ezmUJgbqPCJS1ONNBNLYN/exec";
 const spreadsheetURL = "https://docs.google.com/spreadsheets/d/1FPYOkyNUxfQHIs9WuXchkAKFpV8WczjSBQfyN1OB2YE/edit";
@@ -95,81 +96,62 @@ const spreadsheetURL = "https://docs.google.com/spreadsheets/d/1FPYOkyNUxfQHIs9W
 let isSystemRunning = false; 
 let dataTimer = null; 
 
-// ===== 2. INISIALISASI GRAFIK (TANPA ANIMASI AGAR RESPONSIF) =====
+// ===== 2. INISIALISASI GRAFIK (NO ANIMATION FOR SPEED) =====
 const chartOptions = { 
   responsive: true, 
-  animation: false, // Penting agar data langsung berubah sesuai detik interval
-  scales: { y: { beginAtZero: true }, x: { ticks: { color: '#888' } } } 
+  animation: false, 
+  scales: { y: { beginAtZero: true } } 
 };
 
-function createChart(id, datasets) {
-  return new Chart(document.getElementById(id), {
-    type: 'line',
-    data: { labels: [], datasets: datasets },
-    options: chartOptions
-  });
+function initChart(id, label1, color1, label2 = null, color2 = null) {
+  let datasets = [{ label: label1, data: [], borderColor: color1, tension: 0.1 }];
+  if (label2) datasets.push({ label: label2, data: [], borderColor: color2, tension: 0.1 });
+  return new Chart(document.getElementById(id), { type: 'line', data: { labels: [], datasets: datasets }, options: chartOptions });
 }
 
-let chartTemp = createChart("chartTemp", [
-  { label: 'LM35', data: [], borderColor: '#ff9800', tension: 0.1 },
-  { label: 'DHT11', data: [], borderColor: '#00e5ff', tension: 0.1 }
-]);
+let chartTemp = initChart("chartTemp", "LM35", "#ff9800", "DHT11", "#00e5ff");
+let chartHum  = initChart("chartHum", "Humidity", "#00e676");
+let chartFlow = initChart("chartFlow", "Flow Rate", "#ff5252");
 
-let chartHum = createChart("chartHum", [
-  { label: 'Humidity', data: [], borderColor: '#00e676', tension: 0.1 }
-]);
-
-let chartFlow = createChart("chartFlow", [
-  { label: 'Flow Rate', data: [], borderColor: '#ff5252', tension: 0.1 }
-]);
-
-// ===== 3. LOGIKA KONTROL =====
-
-function openSpreadsheet() {
-  window.open(spreadsheetURL, "_blank");
+// ===== 3. FUNGSI SAKTI AUTO-DETECT DATA =====
+// Fungsi ini akan mencari nama kolom secara cerdas agar tidak terbaca 0
+function getValue(row, keyNames) {
+  for (let key in row) {
+    if (keyNames.some(name => key.toLowerCase().trim() === name.toLowerCase())) {
+      return parseFloat(row[key] || 0);
+    }
+  }
+  return 0;
 }
+
+// ===== 4. LOGIKA SISTEM =====
+function openSpreadsheet() { window.open(spreadsheetURL, "_blank"); }
 
 function setStatus(state) {
-  fetch(controlURL + "?setStatus=" + state)
-    .then(() => {
-      getStatus(); 
-      if(state === 'START') loadData(); 
-    });
+  fetch(controlURL + "?setStatus=" + state).then(() => { getStatus(); if(state === 'START') loadData(); });
 }
 
 function getStatus() {
-  fetch(controlURL)
-    .then(res => res.text())
-    .then(data => {
-      const statusClean = data.trim();
-      const statusEl = document.getElementById("status");
-      statusEl.innerText = "Sistem: " + statusClean;
-      
-      if (statusClean === "START") {
-        isSystemRunning = true;
-        statusEl.style.color = "#00e676";
-      } else {
-        isSystemRunning = false;
-        statusEl.style.color = "#ff5252";
-      }
-    });
+  fetch(controlURL).then(res => res.text()).then(data => {
+    const statusClean = data.trim();
+    const statusEl = document.getElementById("status");
+    statusEl.innerText = "Status Sistem: " + statusClean;
+    isSystemRunning = (statusClean === "START");
+    statusEl.style.color = isSystemRunning ? "#00e676" : "#ff5252";
+  });
 }
 
-// PERBAIKAN INTERVAL: Menghapus timer lama sebelum membuat yang baru
 function updateInterval() {
   const detik = document.getElementById("intervalInput").value;
-  if (detik < 1) { alert("Minimal 1 detik!"); return; }
-
-  const ms = detik * 1000;
+  if (detik < 1) return;
+  
   if (dataTimer) clearInterval(dataTimer);
-  
-  loadData(); // Langsung refresh data saat diklik
-  dataTimer = setInterval(loadData, ms);
-  
-  alert("Refresh rate diatur ke " + detik + " detik");
+  loadData(); // Refresh instan
+  dataTimer = setInterval(loadData, detik * 1000);
+  alert("Refresh Rate: " + detik + " detik");
 }
 
-// ===== 4. LOAD DATA (PERBAIKAN PEMBACAAN FLOW) =====
+// ===== 5. MENGAMBIL DATA =====
 function loadData(){
   if (!isSystemRunning) return; 
 
@@ -181,56 +163,51 @@ function loadData(){
       const tableBody = document.getElementById("table-body");
       tableBody.innerHTML = ""; 
 
-      let labels = [], lm35D = [], dhtD = [], humD = [], flowD = [];
-      const lastData = data.slice(-10);
+      let labels = [], lm35Arr = [], dhtArr = [], humArr = [], flowArr = [];
+      const last10 = data.slice(-10);
 
-      lastData.forEach(row => {
-        // Ambil data dengan toleransi perbedaan nama kolom (Huruf Besar/Kecil/Spasi)
-        let lm35 = parseFloat(row.LM35 || row.lm35 || 0);
-        let dht  = parseFloat(row.DHT11 || row.dht11 || 0);
-        let hum  = parseFloat(row.Humidity || row.humidity || 0);
-        
-        // PERBAIKAN FLOW: Mencari di berbagai kemungkinan nama kolom
-        let flow = parseFloat(row.Flow || row.flow || row["Flow Rate"] || row["flow_rate"] || 0);
+      last10.forEach(row => {
+        // Ambil data (Toleransi nama kolom besar/kecil/spasi)
+        let lm35Val = getValue(row, ["lm35"]);
+        let dhtVal  = getValue(row, ["dht11", "dht"]);
+        let humVal  = getValue(row, ["humidity", "hum"]);
+        let flowVal = getValue(row, ["flow", "flow rate", "flow_rate"]);
 
-        // Isi Tabel
+        // Update Tabel
         let tr = tableBody.insertRow(0);
-        tr.insertCell(0).innerText = row.Waktu || "-";
-        tr.insertCell(1).innerText = lm35.toFixed(1);
-        tr.insertCell(2).innerText = dht.toFixed(1);
-        tr.insertCell(3).innerText = hum.toFixed(1);
-        tr.insertCell(4).innerText = flow.toFixed(2);
+        tr.insertCell(0).innerText = row.Waktu || row.waktu || "-";
+        tr.insertCell(1).innerText = lm35Val.toFixed(1);
+        tr.insertCell(2).innerText = dhtVal.toFixed(1);
+        tr.insertCell(3).innerText = humVal.toFixed(1);
+        tr.insertCell(4).innerText = flowVal.toFixed(2);
 
-        // Isi Array Grafik
-        labels.push(row.Waktu || "");
-        lm35D.push(lm35);
-        dhtD.push(dht);
-        humD.push(hum);
-        flowD.push(flow);
+        // Update Array Chart
+        labels.push(row.Waktu || row.waktu || "");
+        lm35Arr.push(lm35Val); dhtArr.push(dhtVal); humArr.push(humVal); flowArr.push(flowVal);
       });
 
-      // Update semua grafik
+      // Render ke Chart
       chartTemp.data.labels = labels;
-      chartTemp.data.datasets[0].data = lm35D;
-      chartTemp.data.datasets[1].data = dhtD;
+      chartTemp.data.datasets[0].data = lm35Arr;
+      chartTemp.data.datasets[1].data = dhtArr;
       chartTemp.update();
 
       chartHum.data.labels = labels;
-      chartHum.data.datasets[0].data = humD;
+      chartHum.data.datasets[0].data = humArr;
       chartHum.update();
 
       chartFlow.data.labels = labels;
-      chartFlow.data.datasets[0].data = flowD;
+      chartFlow.data.datasets[0].data = flowArr;
       chartFlow.update();
     })
-    .catch(err => console.error("Gagal mengambil data Spreadsheet"));
+    .catch(e => console.log("Gagal memuat data JSON"));
 }
 
-// ===== 5. RUN SYSTEM =====
-getStatus(); 
-setInterval(getStatus, 2000); // Sinkronisasi tombol Start/Stop
-dataTimer = setInterval(loadData, 3000); // Default jalankan per 3 detik
-
+// RUN PERTAMA KALI
+getStatus();
+setInterval(getStatus, 2500); 
+dataTimer = setInterval(loadData, 3000); // Default 3 detik
 </script>
+
 </body>
 </html>
