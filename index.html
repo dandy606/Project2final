@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <title>Final Dashboard Monitoring ESP32</title>
+  <title>Final Dashboard Monitoring ESP32 - Sapu Jagat Version</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
@@ -10,7 +10,6 @@
     body { background-color: #121212; color: #ffffff; font-family: 'Segoe UI', Arial, sans-serif; text-align: center; margin: 0; padding: 20px; }
     h2 { color: #00e5ff; text-transform: uppercase; letter-spacing: 1px; }
     
-    /* TOMBOL & KONTROL */
     .controls { margin: 20px 0; }
     button { padding: 12px 20px; margin: 5px; border: none; border-radius: 8px; font-size: 15px; cursor: pointer; font-weight: bold; transition: 0.2s; }
     button:active { transform: scale(0.95); }
@@ -19,7 +18,6 @@
     .stop { background-color: #ff5252; color: white; }
     .btn-sheet { background-color: #ffeb3b; color: black; }
     
-    /* PANEL INTERVAL */
     .interval-panel { 
       margin: 20px auto; padding: 15px; background: #1e1e1e; 
       display: inline-block; border-radius: 12px; border: 1px solid #333; 
@@ -30,7 +28,6 @@
     }
     .btn-set { background-color: #00bcd4; color: black; padding: 8px 15px; }
 
-    /* GRAFIK & TABEL */
     .chart-container { background-color: #1e1e1e; border-radius: 10px; margin: 20px auto; padding: 15px; max-width: 95%; border: 1px solid #333; }
     table { margin: 20px auto; border-collapse: collapse; width: 95%; background-color: #1e1e1e; font-size: 14px; border-radius: 10px; overflow: hidden; }
     th, td { padding: 12px; border: 1px solid #333; }
@@ -96,7 +93,7 @@ const spreadsheetURL = "https://docs.google.com/spreadsheets/d/1FPYOkyNUxfQHIs9W
 let isSystemRunning = false; 
 let dataTimer = null; 
 
-// ===== 2. INISIALISASI GRAFIK (NO ANIMATION FOR SPEED) =====
+// ===== 2. INISIALISASI GRAFIK =====
 const chartOptions = { 
   responsive: true, 
   animation: false, 
@@ -113,18 +110,7 @@ let chartTemp = initChart("chartTemp", "LM35", "#ff9800", "DHT11", "#00e5ff");
 let chartHum  = initChart("chartHum", "Humidity", "#00e676");
 let chartFlow = initChart("chartFlow", "Flow Rate", "#ff5252");
 
-// ===== 3. FUNGSI SAKTI AUTO-DETECT DATA =====
-// Fungsi ini akan mencari nama kolom secara cerdas agar tidak terbaca 0
-function getValue(row, keyNames) {
-  for (let key in row) {
-    if (keyNames.some(name => key.toLowerCase().trim() === name.toLowerCase())) {
-      return parseFloat(row[key] || 0);
-    }
-  }
-  return 0;
-}
-
-// ===== 4. LOGIKA SISTEM =====
+// ===== 3. LOGIKA SISTEM =====
 function openSpreadsheet() { window.open(spreadsheetURL, "_blank"); }
 
 function setStatus(state) {
@@ -144,14 +130,13 @@ function getStatus() {
 function updateInterval() {
   const detik = document.getElementById("intervalInput").value;
   if (detik < 1) return;
-  
   if (dataTimer) clearInterval(dataTimer);
-  loadData(); // Refresh instan
+  loadData();
   dataTimer = setInterval(loadData, detik * 1000);
   alert("Refresh Rate: " + detik + " detik");
 }
 
-// ===== 5. MENGAMBIL DATA =====
+// ===== 4. MENGAMBIL DATA (LOGIKA SAPU JAGAT) =====
 function loadData(){
   if (!isSystemRunning) return; 
 
@@ -167,26 +152,30 @@ function loadData(){
       const last10 = data.slice(-10);
 
       last10.forEach(row => {
-        // Ambil data (Toleransi nama kolom besar/kecil/spasi)
-        let lm35Val = getValue(row, ["lm35"]);
-        let dhtVal  = getValue(row, ["dht11", "dht"]);
-        let humVal  = getValue(row, ["humidity", "hum"]);
-        let flowVal = getValue(row, ["flow", "flow rate", "flow_rate"]);
+        // --- LOGIKA SAPU JAGAT ---
+        // Kita ambil nama kolom (keys) secara otomatis
+        let keys = Object.keys(row); 
+        
+        // Mengambil data berdasarkan URUTAN KOLOM di Spreadsheet
+        let waktuVal = row[keys[0]] || "-";            // Kolom 1 (Waktu)
+        let lm35Val  = parseFloat(row[keys[1]] || 0);  // Kolom 2 (LM35)
+        let dhtVal   = parseFloat(row[keys[2]] || 0);  // Kolom 3 (DHT11)
+        let humVal   = parseFloat(row[keys[3]] || 0);  // Kolom 4 (Humidity)
+        let flowVal  = parseFloat(row[keys[4]] || 0);  // Kolom 5 (Flow / Start / Apapun namanya)
 
         // Update Tabel
         let tr = tableBody.insertRow(0);
-        tr.insertCell(0).innerText = row.Waktu || row.waktu || "-";
+        tr.insertCell(0).innerText = waktuVal;
         tr.insertCell(1).innerText = lm35Val.toFixed(1);
         tr.insertCell(2).innerText = dhtVal.toFixed(1);
         tr.insertCell(3).innerText = humVal.toFixed(1);
         tr.insertCell(4).innerText = flowVal.toFixed(2);
 
         // Update Array Chart
-        labels.push(row.Waktu || row.waktu || "");
+        labels.push(waktuVal);
         lm35Arr.push(lm35Val); dhtArr.push(dhtVal); humArr.push(humVal); flowArr.push(flowVal);
       });
 
-      // Render ke Chart
       chartTemp.data.labels = labels;
       chartTemp.data.datasets[0].data = lm35Arr;
       chartTemp.data.datasets[1].data = dhtArr;
@@ -203,10 +192,10 @@ function loadData(){
     .catch(e => console.log("Gagal memuat data JSON"));
 }
 
-// RUN PERTAMA KALI
+// RUN
 getStatus();
 setInterval(getStatus, 2500); 
-dataTimer = setInterval(loadData, 3000); // Default 3 detik
+dataTimer = setInterval(loadData, 3000); 
 </script>
 
 </body>
