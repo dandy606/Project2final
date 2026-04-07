@@ -2,15 +2,13 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <title>Dashboard Monitoring ESP32 - Sapu Jagat + Alarm</title>
+  <title>Dashboard ESP32 - Auto Reset Alarm</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    /* STYLE DASAR */
     body { background-color: #121212; color: #ffffff; font-family: 'Segoe UI', Arial, sans-serif; text-align: center; margin: 0; padding: 20px; }
     h2 { color: #00e5ff; text-transform: uppercase; letter-spacing: 1px; }
     
-    /* PANEL KONTROL */
     .controls, .interval-panel, .alarm-panel { 
       margin: 10px auto; padding: 15px; background: #1e1e1e; 
       display: inline-block; border-radius: 12px; border: 1px solid #333; 
@@ -24,42 +22,41 @@
     
     input { width: 60px; padding: 8px; border-radius: 5px; border: 1px solid #00e5ff; background: #121212; color: white; text-align: center; font-size: 16px; }
 
-    /* STYLE ALARM */
-    #status-container { margin: 20px 0; min-height: 50px; }
-    .alarm-active { background-color: #ff5252 !important; animation: blink 0.6s infinite; color: white; padding: 15px; border-radius: 10px; font-weight: bold; font-size: 20px; }
+    /* STYLE ALARM AUTO-RESET */
+    #status-container { margin: 20px 0; min-height: 80px; }
+    .alarm-active { background-color: #ff5252 !important; animation: blink 0.6s infinite; color: white; padding: 15px; border-radius: 10px; font-weight: bold; font-size: 20px; border: 2px solid white; }
+    .status-normal { background-color: #1e1e1e; color: #00e676; padding: 15px; border-radius: 10px; font-weight: bold; border: 1px solid #333; }
+    
     @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
-    .row-alert { background-color: rgba(255, 82, 82, 0.4) !important; color: #ffcdd2; font-weight: bold; }
+    .row-alert { background-color: rgba(255, 82, 82, 0.4) !important; color: #ffcdd2; }
 
-    /* GRAFIK & TABEL */
     .chart-container { background-color: #1e1e1e; border-radius: 10px; margin: 20px auto; padding: 15px; max-width: 95%; border: 1px solid #333; }
-    table { margin: 20px auto; border-collapse: collapse; width: 95%; background-color: #1e1e1e; font-size: 14px; border-radius: 10px; overflow: hidden; }
+    table { margin: 20px auto; border-collapse: collapse; width: 95%; background-color: #1e1e1e; font-size: 14px; }
     th, td { padding: 12px; border: 1px solid #333; }
     th { background-color: #00bcd4; color: black; }
     tr:nth-child(even) { background-color: #252525; }
-    
-    #status-text { font-size: 18px; font-weight: bold; margin-bottom: 10px; }
   </style>
 </head>
 
 <body>
 
-<h2>🌙 Monitoring ESP32 + Alarm System</h2>
+<h2>🌙 Monitoring System ESP32</h2>
 
 <div id="status-container">
-  <div id="status-text">Inisialisasi...</div>
-  <div id="alarm-banner"></div>
+  <div id="alarm-banner" class="status-normal">Menghubungkan ke Sensor...</div>
+  <p id="status-text" style="margin-top:10px;">Status ESP32: Menunggu...</p>
 </div>
 
 <div class="controls">
   <button class="start" onclick="setStatus('START')">🟢 START</button> 
   <button class="stop" onclick="setStatus('STOP')">🔴 STOP</button>
-  <button class="btn-sheet" onclick="openSpreadsheet()">📊 DATA SPREADSHEET</button>
+  <button class="btn-sheet" onclick="openSpreadsheet()">📊 BUKA SPREADSHEET</button>
 </div>
 
 <div class="interval-panel">
   <label>⏱️ Update (Dtk): </label>
   <input type="number" id="intervalInput" value="3" min="1">
-  <button onclick="updateInterval()" style="background:#00bcd4; border-radius:5px; padding:8px;">SET</button>
+  <button onclick="updateInterval()" style="background:#00bcd4; padding:8px; border-radius:5px;">SET</button>
 </div>
 
 <div class="alarm-panel">
@@ -75,11 +72,11 @@
 </div>
 
 <div class="chart-container">
-  <h3>🌡️ Suhu (LM35 & DHT11) & 💧 Hum</h3>
+  <h3>🌡️ Grafik Sensor Suhu & Hum</h3>
   <canvas id="chartSensors"></canvas>
 </div>
 
-<h3>📋 Log Data Terakhir</h3>
+<h3>📋 Tabel Log Data</h3>
 <table id="data-table">
   <thead>
     <tr>
@@ -94,7 +91,6 @@
 </table>
 
 <script>
-// ===== 1. KONFIGURASI =====
 const sheetURL = "https://opensheet.elk.sh/1FPYOkyNUxfQHIs9WuXchkAKFpV8WczjSBQfyN1OB2YE/DATA";
 const controlURL = "https://script.google.com/macros/s/AKfycbx-cziGXnj42WpcGbeZ4xOm3-StjmqZ-n_8pJy9binWBI0ezmUJgbqPCJS1ONNBNLYN/exec";
 const spreadsheetURL = "https://docs.google.com/spreadsheets/d/1FPYOkyNUxfQHIs9WuXchkAKFpV8WczjSBQfyN1OB2YE/edit";
@@ -103,46 +99,25 @@ let isSystemRunning = false;
 let dataTimer = null; 
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-// ===== 2. INISIALISASI GRAFIK =====
+// --- GRAFIK ---
 const chartOptions = { responsive: true, animation: false, scales: { y: { beginAtZero: true } } };
-
 let chartFlow = new Chart(document.getElementById("chartFlow"), {
-  type: 'line', 
-  data: { labels: [], datasets: [{ label: 'Flow Rate', data: [], borderColor: '#ff5252', tension: 0.1 }] }, 
-  options: chartOptions 
+  type: 'line', data: { labels: [], datasets: [{ label: 'Flow Rate', data: [], borderColor: '#ff5252', tension: 0.1 }] }, options: chartOptions 
 });
-
 let chartSensors = new Chart(document.getElementById("chartSensors"), {
-  type: 'line', 
-  data: { labels: [], datasets: [
-    { label: 'LM35', data: [], borderColor: '#ff9800', tension: 0.1 },
-    { label: 'DHT11', data: [], borderColor: '#00e5ff', tension: 0.1 },
-    { label: 'Hum', data: [], borderColor: '#00e676', tension: 0.1 }
-  ]}, 
-  options: chartOptions 
+  type: 'line', data: { labels: [], datasets: [
+    { label: 'LM35', data: [], borderColor: '#ff9800' },
+    { label: 'DHT11', data: [], borderColor: '#00e5ff' },
+    { label: 'Hum', data: [], borderColor: '#00e676' }
+  ]}, options: chartOptions 
 });
 
-// ===== 3. LOGIKA ALARM SUARA =====
-function playAlarmSound() {
-  if (audioCtx.state === 'suspended') audioCtx.resume();
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  osc.connect(gain);
-  gain.connect(audioCtx.destination);
-  osc.type = "square";
-  osc.frequency.setValueAtTime(440, audioCtx.currentTime); // Nada A4
-  osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.1);
-  gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.5);
-  osc.start(); osc.stop(audioCtx.currentTime + 0.5);
-}
-
-// ===== 4. LOGIKA SISTEM =====
+// --- FUNGSI ---
 function openSpreadsheet() { window.open(spreadsheetURL, "_blank"); }
 
 function setStatus(state) {
   fetch(controlURL + "?setStatus=" + state).then(() => {
-    alert("Perintah " + state + " dikirim!");
+    alert("Sistem diatur ke: " + state);
     location.reload(); 
   });
 }
@@ -151,7 +126,7 @@ function getStatus() {
   fetch(controlURL).then(res => res.text()).then(data => {
     const statusClean = data.trim();
     const statusText = document.getElementById("status-text");
-    statusText.innerText = "Status Sistem: " + statusClean;
+    statusText.innerText = "Status ESP32: " + statusClean;
     isSystemRunning = (statusClean === "START");
     statusText.style.color = isSystemRunning ? "#00e676" : "#ff5252";
   });
@@ -159,91 +134,85 @@ function getStatus() {
 
 function updateInterval() {
   const detik = document.getElementById("intervalInput").value;
-  if (detik < 1) return;
-  if (dataTimer) clearInterval(dataTimer);
-  loadData();
+  clearInterval(dataTimer);
   dataTimer = setInterval(loadData, detik * 1000);
-  alert("Update data setiap " + detik + " detik");
+  alert("Interval diperbarui!");
 }
 
-// ===== 5. MENGAMBIL DATA (LOGIKA SAPU JAGAT + ALARM) =====
+function playAlarmSound() {
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.type = "square";
+  osc.frequency.setValueAtTime(660, audioCtx.currentTime); 
+  gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.3);
+  osc.start(); osc.stop(audioCtx.currentTime + 0.3);
+}
+
+// --- CORE LOAD DATA ---
 function loadData(){
   if (!isSystemRunning) return; 
 
-  fetch(sheetURL)
-    .then(res => res.json())
-    .then(data => {
-      if (!data || data.length === 0) return;
+  fetch(sheetURL).then(res => res.json()).then(data => {
+    if (!data || data.length === 0) return;
 
-      const tableBody = document.getElementById("table-body");
-      const alarmBanner = document.getElementById("alarm-banner");
-      tableBody.innerHTML = ""; 
+    const tableBody = document.getElementById("table-body");
+    const alarmBanner = document.getElementById("alarm-banner");
+    tableBody.innerHTML = ""; 
+    
+    let labels = [], flowArr = [], lm35Arr = [], dhtArr = [], humArr = [];
+    const last10 = data.slice(-10);
+    
+    // Ambil input batas alarm
+    const minF = parseFloat(document.getElementById("flowMin").value);
+    const maxF = parseFloat(document.getElementById("flowMax").value);
+    
+    // Logika Alarm: Hanya cek data PALING BARU (data terakhir dalam array)
+    let latestData = last10[last10.length - 1];
+    let latestKeys = Object.keys(latestData);
+    let latestFlow = parseFloat(latestData[latestKeys[4]] || 0);
 
-      let labels = [], flowArr = [], lm35Arr = [], dhtArr = [], humArr = [];
-      const last10 = data.slice(-10);
-      
-      const minF = parseFloat(document.getElementById("flowMin").value);
-      const maxF = parseFloat(document.getElementById("flowMax").value);
-      let triggerAlarm = false;
+    // RESET ATAU AKTIFKAN ALARM
+    if (latestFlow < minF || latestFlow > maxF) {
+      alarmBanner.innerText = "⚠️ BAHAYA: FLOW TIDAK NORMAL (" + latestFlow.toFixed(2) + ")";
+      alarmBanner.className = "alarm-active";
+      playAlarmSound();
+    } else {
+      alarmBanner.innerText = "✅ SISTEM NORMAL (Flow: " + latestFlow.toFixed(2) + ")";
+      alarmBanner.className = "status-normal";
+    }
 
-      last10.forEach(row => {
-        let keys = Object.keys(row); 
-        
-        // AMBIL DATA SAPU JAGAT
-        let waktuVal = row[keys[0]] || "-";
-        let lm35Val  = parseFloat(row[keys[1]] || 0);
-        let dhtVal   = parseFloat(row[keys[2]] || 0);
-        let humVal   = parseFloat(row[keys[3]] || 0);
-        let flowVal  = parseFloat(row[keys[4]] || 0);
+    last10.forEach(row => {
+      let keys = Object.keys(row); 
+      let waktuVal = row[keys[0]] || "-";
+      let lm35Val  = parseFloat(row[keys[1]] || 0);
+      let dhtVal   = parseFloat(row[keys[2]] || 0);
+      let humVal   = parseFloat(row[keys[3]] || 0);
+      let flowVal  = parseFloat(row[keys[4]] || 0);
 
-        // CEK APAKAH DATA TERBARU MELANGGAR BATAS
-        let isCritical = (flowVal < minF || flowVal > maxF);
-        if (isCritical) triggerAlarm = true;
+      let tr = tableBody.insertRow(0);
+      if (flowVal < minF || flowVal > maxF) tr.className = "row-alert";
+      tr.innerHTML = `<td>${waktuVal}</td><td>${lm35Val}</td><td>${dhtVal}</td><td>${humVal}</td><td>${flowVal}</td>`;
 
-        // Update Tabel
-        let tr = tableBody.insertRow(0);
-        if (isCritical) tr.className = "row-alert";
-        
-        tr.innerHTML = `<td>${waktuVal}</td><td>${lm35Val.toFixed(1)}</td><td>${dhtVal.toFixed(1)}</td><td>${humVal.toFixed(1)}</td><td>${flowVal.toFixed(2)}</td>`;
+      labels.push(waktuVal);
+      flowArr.push(flowVal); lm35Arr.push(lm35Val); dhtArr.push(dhtVal); humArr.push(humVal);
+    });
 
-        labels.push(waktuVal);
-        flowArr.push(flowVal); lm35Arr.push(lm35Val); dhtArr.push(dhtVal); humArr.push(humVal);
-      });
-
-      // EFEK ALARM
-      if (triggerAlarm) {
-        alarmBanner.innerText = "⚠️ BAHAYA: FLOW DILUAR BATAS!";
-        alarmBanner.className = "alarm-active";
-        playAlarmSound();
-      } else {
-        alarmBanner.innerText = "Sistem Normal";
-        alarmBanner.className = "";
-      }
-
-      // Update Chart
-      chartFlow.data.labels = labels;
-      chartFlow.data.datasets[0].data = flowArr;
-      chartFlow.update();
-
-      chartSensors.data.labels = labels;
-      chartSensors.data.datasets[0].data = lm35Arr;
-      chartSensors.data.datasets[1].data = dhtArr;
-      chartSensors.data.datasets[2].data = humArr;
-      chartSensors.update();
-    })
-    .catch(e => console.log("Error Load Data"));
+    chartFlow.data.labels = labels; chartFlow.data.datasets[0].data = flowArr; chartFlow.update();
+    chartSensors.data.labels = labels;
+    chartSensors.data.datasets[0].data = lm35Arr;
+    chartSensors.data.datasets[1].data = dhtArr;
+    chartSensors.data.datasets[2].data = humArr;
+    chartSensors.update();
+  });
 }
 
-// JALANKAN
 getStatus();
 setInterval(getStatus, 5000); 
 dataTimer = setInterval(loadData, 3000);
-
-// Klik layar untuk aktifkan audio browser
-document.body.addEventListener('click', () => {
-  if (audioCtx.state === 'suspended') audioCtx.resume();
-});
+document.body.addEventListener('click', () => { if (audioCtx.state === 'suspended') audioCtx.resume(); });
 </script>
-
 </body>
 </html>
