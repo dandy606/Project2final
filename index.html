@@ -2,46 +2,41 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <title>Final Dashboard Monitoring ESP32 - Sapu Jagat Version</title>
+  <title>Monitoring ESP32 + Alarm System</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    /* STYLE DASHBOARD */
     body { background-color: #121212; color: #ffffff; font-family: 'Segoe UI', Arial, sans-serif; text-align: center; margin: 0; padding: 20px; }
-    h2 { color: #00e5ff; text-transform: uppercase; letter-spacing: 1px; }
+    h2 { color: #00e5ff; text-transform: uppercase; }
     
-    .controls { margin: 20px 0; }
-    button { padding: 12px 20px; margin: 5px; border: none; border-radius: 8px; font-size: 15px; cursor: pointer; font-weight: bold; transition: 0.2s; }
-    button:active { transform: scale(0.95); }
+    .controls, .interval-panel, .alarm-panel { 
+      margin: 10px auto; padding: 15px; background: #1e1e1e; 
+      display: inline-block; border-radius: 12px; border: 1px solid #333; 
+    }
     
+    button { padding: 12px 20px; margin: 5px; border: none; border-radius: 8px; font-size: 15px; cursor: pointer; font-weight: bold; }
     .start { background-color: #00e676; color: black; }
     .stop { background-color: #ff5252; color: white; }
     .btn-sheet { background-color: #ffeb3b; color: black; }
     
-    .interval-panel { 
-      margin: 20px auto; padding: 15px; background: #1e1e1e; 
-      display: inline-block; border-radius: 12px; border: 1px solid #333; 
-    }
-    #intervalInput { 
-      width: 60px; padding: 8px; border-radius: 5px; border: 1px solid #00e5ff; 
-      background: #121212; color: white; text-align: center; font-size: 16px;
-    }
-    .btn-set { background-color: #00bcd4; color: black; padding: 8px 15px; }
+    input { width: 60px; padding: 8px; border-radius: 5px; border: 1px solid #00e5ff; background: #121212; color: white; text-align: center; }
+
+    /* STYLE ALARM */
+    .alarm-active { background-color: #ff5252 !important; animation: blink 0.5s infinite; color: white; padding: 10px; border-radius: 10px; }
+    @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+    .row-alert { background-color: rgba(255, 82, 82, 0.3) !important; }
 
     .chart-container { background-color: #1e1e1e; border-radius: 10px; margin: 20px auto; padding: 15px; max-width: 95%; border: 1px solid #333; }
-    table { margin: 20px auto; border-collapse: collapse; width: 95%; background-color: #1e1e1e; font-size: 14px; border-radius: 10px; overflow: hidden; }
+    table { margin: 20px auto; border-collapse: collapse; width: 95%; background-color: #1e1e1e; font-size: 14px; }
     th, td { padding: 12px; border: 1px solid #333; }
     th { background-color: #00bcd4; color: black; }
-    tr:nth-child(even) { background-color: #252525; }
-    
-    #status { font-size: 18px; margin: 15px; font-weight: bold; }
   </style>
 </head>
 
 <body>
 
-<h2>🌙 Monitoring System ESP32</h2>
-<p id="status">Inisialisasi...</p>
+<h2>🌙 Monitoring & Alarm Flow</h2>
+<div id="alarm-status">Sistem Normal</div>
 
 <div class="controls">
   <button class="start" onclick="setStatus('START')">🟢 START</button> 
@@ -50,19 +45,16 @@
 </div>
 
 <div class="interval-panel">
-  <label for="intervalInput">⏱️ Update Data (Detik): </label>
+  <label>⏱️ Update (dtk): </label>
   <input type="number" id="intervalInput" value="3" min="1">
-  <button class="btn-set" onclick="updateInterval()">SET & REFRESH</button>
+  <button onclick="updateInterval()" style="background:#00bcd4; color:black; padding:5px 10px; border-radius:5px;">SET</button>
 </div>
 
-<div class="chart-container">
-  <h3>🌡️ Grafik Suhu (LM35 vs DHT11)</h3>
-  <canvas id="chartTemp"></canvas>
-</div>
-
-<div class="chart-container">
-  <h3>💧 Grafik Kelembapan (%)</h3>
-  <canvas id="chartHum"></canvas>
+<div class="alarm-panel">
+  <label>⚠️ Batas Flow Min: </label>
+  <input type="number" id="flowMin" value="0.5" step="0.1">
+  <label> Max: </label>
+  <input type="number" id="flowMax" value="10.0" step="0.1">
 </div>
 
 <div class="chart-container">
@@ -70,133 +62,113 @@
   <canvas id="chartFlow"></canvas>
 </div>
 
+<div class="chart-container">
+  <h3>🌡️ Grafik Suhu & 💧 Humidity</h3>
+  <canvas id="chartMain"></canvas>
+</div>
+
 <h3>📋 Log Data Terakhir</h3>
 <table id="data-table">
   <thead>
-    <tr>
-      <th>Waktu</th>
-      <th>LM35 (°C)</th>
-      <th>DHT11 (°C)</th>
-      <th>Humidity (%)</th>
-      <th>Flow (L/m)</th>
-    </tr>
+    <tr><th>Waktu</th><th>LM35</th><th>DHT11</th><th>Hum</th><th>Flow</th></tr>
   </thead>
   <tbody id="table-body"></tbody>
 </table>
 
 <script>
-// ===== 1. KONFIGURASI =====
 const sheetURL = "https://opensheet.elk.sh/1FPYOkyNUxfQHIs9WuXchkAKFpV8WczjSBQfyN1OB2YE/DATA";
 const controlURL = "https://script.google.com/macros/s/AKfycbx-cziGXnj42WpcGbeZ4xOm3-StjmqZ-n_8pJy9binWBI0ezmUJgbqPCJS1ONNBNLYN/exec";
 const spreadsheetURL = "https://docs.google.com/spreadsheets/d/1FPYOkyNUxfQHIs9WuXchkAKFpV8WczjSBQfyN1OB2YE/edit";
 
 let isSystemRunning = false; 
 let dataTimer = null; 
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-// ===== 2. INISIALISASI GRAFIK =====
-const chartOptions = { 
-  responsive: true, 
-  animation: false, 
-  scales: { y: { beginAtZero: true } } 
-};
+// --- INISIALISASI GRAFIK ---
+const opt = { responsive: true, animation: false };
+let chartFlow = new Chart(document.getElementById("chartFlow"), {
+  type: 'line', data: { labels: [], datasets: [{ label: 'Flow', data: [], borderColor: '#ff5252' }] }, options: opt
+});
+let chartMain = new Chart(document.getElementById("chartMain"), {
+  type: 'line', data: { labels: [], datasets: [
+    { label: 'LM35', data: [], borderColor: '#ff9800' },
+    { label: 'Humidity', data: [], borderColor: '#00e676' }
+  ] }, options: opt
+});
 
-function initChart(id, label1, color1, label2 = null, color2 = null) {
-  let datasets = [{ label: label1, data: [], borderColor: color1, tension: 0.1 }];
-  if (label2) datasets.push({ label: label2, data: [], borderColor: color2, tension: 0.1 });
-  return new Chart(document.getElementById(id), { type: 'line', data: { labels: [], datasets: datasets }, options: chartOptions });
-}
-
-let chartTemp = initChart("chartTemp", "LM35", "#ff9800", "DHT11", "#00e5ff");
-let chartHum  = initChart("chartHum", "Humidity", "#00e676");
-let chartFlow = initChart("chartFlow", "Flow Rate", "#ff5252");
-
-// ===== 3. LOGIKA SISTEM =====
 function openSpreadsheet() { window.open(spreadsheetURL, "_blank"); }
 
-function setStatus(state) {
-  fetch(controlURL + "?setStatus=" + state).then(() => { getStatus(); if(state === 'START') loadData(); });
+function setStatus(s) { fetch(controlURL + "?setStatus=" + s).then(() => location.reload()); }
+
+function updateInterval() {
+  const d = document.getElementById("intervalInput").value;
+  clearInterval(dataTimer);
+  dataTimer = setInterval(loadData, d * 1000);
+  alert("Interval: " + d + " dtk");
 }
 
-function getStatus() {
-  fetch(controlURL).then(res => res.text()).then(data => {
-    const statusClean = data.trim();
-    const statusEl = document.getElementById("status");
-    statusEl.innerText = "Status Sistem: " + statusClean;
-    isSystemRunning = (statusClean === "START");
-    statusEl.style.color = isSystemRunning ? "#00e676" : "#ff5252";
+// Fungsi Bunyi Alarm
+function playAlarmSound() {
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(880, audioCtx.currentTime); 
+  gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.5);
+  osc.start(); osc.stop(audioCtx.currentTime + 0.5);
+}
+
+function loadData(){
+  fetch(sheetURL).then(res => res.json()).then(data => {
+    if (!data || data.length === 0) return;
+    const tableBody = document.getElementById("table-body");
+    tableBody.innerHTML = ""; 
+    const last10 = data.slice(-10);
+    
+    let labels = [], flowArr = [], lm35Arr = [], humArr = [];
+    const minF = parseFloat(document.getElementById("flowMin").value);
+    const maxF = parseFloat(document.getElementById("flowMax").value);
+    let isAlert = false;
+
+    last10.forEach(row => {
+      let keys = Object.keys(row);
+      let f = parseFloat(row[keys[4]] || 0); // Kolom 5 Sapu Jagat
+      let t1 = parseFloat(row[keys[1]] || 0);
+      let h = parseFloat(row[keys[3]] || 0);
+      let w = row[keys[0]];
+
+      // CEK ALARM (Data Terbaru)
+      if (f < minF || f > maxF) { isAlert = true; }
+
+      let tr = tableBody.insertRow(0);
+      if (f < minF || f > maxF) tr.className = "row-alert";
+      tr.innerHTML = `<td>${w}</td><td>${t1}</td><td>${row[keys[2]]}</td><td>${h}</td><td>${f}</td>`;
+
+      labels.push(w); flowArr.push(f); lm35Arr.push(t1); humArr.push(h);
+    });
+
+    // Update Status UI
+    const statusBox = document.getElementById("alarm-status");
+    if (isAlert) {
+      statusBox.innerText = "⚠️ BAHAYA: FLOW DILUAR BATAS!";
+      statusBox.className = "alarm-active";
+      playAlarmSound();
+    } else {
+      statusBox.innerText = "Sistem Normal";
+      statusBox.className = "";
+    }
+
+    chartFlow.data.labels = labels; chartFlow.data.datasets[0].data = flowArr; chartFlow.update();
+    chartMain.data.labels = labels; chartMain.data.datasets[0].data = lm35Arr; chartMain.data.datasets[1].data = humArr; chartMain.update();
   });
 }
 
-function updateInterval() {
-  const detik = document.getElementById("intervalInput").value;
-  if (detik < 1) return;
-  if (dataTimer) clearInterval(dataTimer);
-  loadData();
-  dataTimer = setInterval(loadData, detik * 1000);
-  alert("Refresh Rate: " + detik + " detik");
-}
-
-// ===== 4. MENGAMBIL DATA (LOGIKA SAPU JAGAT) =====
-function loadData(){
-  if (!isSystemRunning) return; 
-
-  fetch(sheetURL)
-    .then(res => res.json())
-    .then(data => {
-      if (!data || data.length === 0) return;
-
-      const tableBody = document.getElementById("table-body");
-      tableBody.innerHTML = ""; 
-
-      let labels = [], lm35Arr = [], dhtArr = [], humArr = [], flowArr = [];
-      const last10 = data.slice(-10);
-
-      last10.forEach(row => {
-        // --- LOGIKA SAPU JAGAT ---
-        // Kita ambil nama kolom (keys) secara otomatis
-        let keys = Object.keys(row); 
-        
-        // Mengambil data berdasarkan URUTAN KOLOM di Spreadsheet
-        let waktuVal = row[keys[0]] || "-";            // Kolom 1 (Waktu)
-        let lm35Val  = parseFloat(row[keys[1]] || 0);  // Kolom 2 (LM35)
-        let dhtVal   = parseFloat(row[keys[2]] || 0);  // Kolom 3 (DHT11)
-        let humVal   = parseFloat(row[keys[3]] || 0);  // Kolom 4 (Humidity)
-        let flowVal  = parseFloat(row[keys[4]] || 0);  // Kolom 5 (Flow / Start / Apapun namanya)
-
-        // Update Tabel
-        let tr = tableBody.insertRow(0);
-        tr.insertCell(0).innerText = waktuVal;
-        tr.insertCell(1).innerText = lm35Val.toFixed(1);
-        tr.insertCell(2).innerText = dhtVal.toFixed(1);
-        tr.insertCell(3).innerText = humVal.toFixed(1);
-        tr.insertCell(4).innerText = flowVal.toFixed(2);
-
-        // Update Array Chart
-        labels.push(waktuVal);
-        lm35Arr.push(lm35Val); dhtArr.push(dhtVal); humArr.push(humVal); flowArr.push(flowVal);
-      });
-
-      chartTemp.data.labels = labels;
-      chartTemp.data.datasets[0].data = lm35Arr;
-      chartTemp.data.datasets[1].data = dhtArr;
-      chartTemp.update();
-
-      chartHum.data.labels = labels;
-      chartHum.data.datasets[0].data = humArr;
-      chartHum.update();
-
-      chartFlow.data.labels = labels;
-      chartFlow.data.datasets[0].data = flowArr;
-      chartFlow.update();
-    })
-    .catch(e => console.log("Gagal memuat data JSON"));
-}
-
-// RUN
-getStatus();
-setInterval(getStatus, 2500); 
-dataTimer = setInterval(loadData, 3000); 
+// Start
+fetch(controlURL).then(res => res.text()).then(d => {
+  isSystemRunning = (d.trim() === "START");
+  if(isSystemRunning) dataTimer = setInterval(loadData, 3000);
+});
 </script>
-
 </body>
 </html>
